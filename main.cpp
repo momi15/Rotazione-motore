@@ -1,20 +1,21 @@
+#define WIN32_LEARN_AND_MEAN
 #define SDL_MAIN_HANDLED
+//librerie Windows per la comunicazione
+#include <winsock2.h>
+#include <windows.h>
+#include <ws2tcpip.h>
 //librerie SDL
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
-
+//librerie C++ base
 #include <fstream>
-#include <cstring>
 #include <iostream>
 #include <cmath>
+#include <thread>
+//libreria opencv per renderizare il video
+#include <opencv4/opencv2/opencv.hpp>
 
-//librerie linux per la comunicazione 
-// #include <sys/types.h>
-// #include <unistd.h>
-// #include <sys/socket.h>
-// #include <netdb.h>
-// #include <arpa/inet.h>
 
 //macro per la gestione della finestra
 #define ALTEZZA_TITOLO 20
@@ -25,7 +26,7 @@
 #define ATTESA 3500
 
 //macro per la connesione di rete
-#define PORT 27016
+#define PORT "27016"
 
 //sistema per verificare le variabili
 template <typename var>
@@ -57,7 +58,7 @@ struct Windows
         Surf=nullptr;
         SDL_GetWindowSize(Window,(int*)&w,(int*)&h);
     }
-    //destructor della finestraV
+    //destructor della finestra
     ~Windows(){
         if(Texture!=nullptr)
             SDL_DestroyTexture(Texture);
@@ -277,8 +278,45 @@ struct  Text
         controllo(Scritta_T);
     }
 };
+void Connesione(SOCKET &s){
+    if(s!=INVALID_SOCKET){
+        closesocket(s);
+        s=INVALID_SOCKET;
+    }
+    int iResult=0;
+    struct addrinfo *result=nullptr,*ptr=nullptr,hints;
+    ZeroMemory(&hints,sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+    do{
+        iResult=getaddrinfo("192.168.4.1",PORT,&hints,&result);
+        if(iResult!=0){
+            std::cout<<"getaddrinfo failed "<<WSAGetLastError()<<"\n";
+        }
+        for(ptr=result;ptr!=nullptr;ptr=ptr->ai_next){
+            s = socket(ptr->ai_family,ptr->ai_socktype,ptr->ai_protocol);
+            if(s==INVALID_SOCKET){
+                std::cout<<"socket failed with error: "<<WSAGetLastError()<<"\n";
+            }
+            iResult=connect(s,ptr->ai_addr,(int)ptr->ai_addrlen);
+            if(iResult==SOCKET_ERROR){
+                std::cout<<"connection failed with error "<<WSAGetLastError()<<"\n";
+                closesocket(s);
+                s=INVALID_SOCKET;
+                continue;
+            }
+            break;
+        }
+        freeaddrinfo(result);
+    }while(s==INVALID_SOCKET);
+}
 int main() {
-    #pragma region SDL
+    WSADATA wsaData;
+    int iResult=WSAStartup(MAKEWORD(2,2),&wsaData);
+    if(iResult!=0){
+        std::cout<<"Impossibile inizializzare WSA\t"<<iResult<<"\n\n";
+    }
     //inizializzazione di SDL 
     if(SDL_Init(SDL_INIT_VIDEO)<0){
         std::cerr<<"impossibile inizializzare SDL2";
@@ -313,15 +351,16 @@ int main() {
            indietro("img/avanti_on.jpg"/*bottone non schiacciato*/,"img/avanti_off.jpg"/*bottone schiacciato*/,"img/avanti_passive.jpg"/*bottone disattivato*/,titolo.Area.h+finestra.h/MARGINE+avanti.Area.h*2/*offsetY*/,MARGINE/*offsetX*/                         ,finestra.h,finestra.w,finestra.Renderer),
            mode1("img/avanti_on.jpg"/*bottone non schiacciato*/,"img/avanti_off.jpg"/*bottone schiacciato*/,"img/avanti_passive.jpg"/*bottone disattivato*/,titolo.Area.h+finestra.h/MARGINE /*offsetY*/                  ,finestra.w-MARGINE-avanti.Area.w/*offsetX*/,finestra.h,finestra.w,finestra.Renderer),
            mode2("img/avanti_on.jpg"/*bottone non schiacciato*/,"img/avanti_off.jpg"/*bottone schiacciato*/,"img/avanti_passive.jpg"/*bottone disattivato*/,titolo.Area.h+finestra.h/MARGINE+avanti.Area.h*2/*offsetY*/   ,finestra.w-MARGINE-avanti.Area.w/*offsetX*/,finestra.h,finestra.w,finestra.Renderer),
-           close("img/close.png","img/close.png","img/close.png",0,0,finestra.h,finestra.w,finestra.Renderer),
+           close_("img/close.png","img/close.png","img/close.png",0,0,finestra.h,finestra.w,finestra.Renderer),
            stop("img/avanti_on.jpg"/*bottone non schiacciato*/,"img/avanti_on.jpg"/*bottone schiacciato*/,"img/avanti_passive.jpg"/*bottone disattivato*/,0,0,finestra.h,finestra.w,finestra.Renderer),
-           video_b("img/avanti_on.jpg","img/avanti_on.jpg","img/avanti_passive.jpg",0,0,finestra.h,finestra.w,finestra.Renderer);
+           video_b("img/avanti_on.jpg","img/avanti_on.jpg","img/avanti_passive.jpg",0,0,finestra.h,finestra.w,finestra.Renderer),
+           indietro_v("img/avanti_on.jpg","img/avanti_on.jpg","img/avanti_passive.jpg",0,0,finestra.h,finestra.w,finestra.Renderer);
     std::string giostre_s[3],leggi;
     std::ifstream file("file_modificabili/giostre.txt");
     for(uint8_t i=0;std::getline(file,leggi);++i){
         giostre_s[i]=leggi;
     }
-           //definizione dei vari bottoni con i nomi delle giostre
+    //definizione dei vari bottoni con i nomi delle giostre
     RideButton Giostra1(giostre_s[0].c_str(),"img/sfondo_pulsante_giostra1.jpg",finestra.w,finestra.h,finestra.Renderer,1,MARGINE,1),
                Giostra2(giostre_s[1].c_str(),"img/sfondo_pulsante_giostra1.jpg",finestra.w,finestra.h,finestra.Renderer,1,Giostra1.Area_sfondo.h+Giostra1.Area_sfondo.y,1),
                Giostra3(giostre_s[2].c_str(),"img/sfondo_pulsante_giostra1.jpg",finestra.w,finestra.h,finestra.Renderer,1,Giostra2.Area_sfondo.h+Giostra2.Area_sfondo.y,1);
@@ -333,76 +372,78 @@ int main() {
     stop.Area.x=finestra.w/2-stop.Area.w/2;
     stop.Area.y=finestra.h/2;
     //imposto la posizione del pulsante di chiusura
-    close.Area.x=MARGINE/2;
-    close.Area.y=MARGINE/2;
+    close_.Area.x=MARGINE/2;
+    close_.Area.y=MARGINE/2;
     //imposto la posizione del pulsante del video
     video_b.Area.y=finestra.h-video_b.Area.h;
     video_b.Area.x=0;
+    //imposto la posizione del pulsante per tornare indietro dalla schermata del video
+    indietro_v.Area.y=0;
+    indietro_v.Area.x=0;
     //imposto la posizione scritta dello stato del motore
     ClientState.Area.x=finestra.w-ClientState.Area.w-MARGINE;
     ClientState.Area.y=finestra.h-ClientState.Area.h-MARGINE;
     //imposto la posizione della scritta dell'attesa
     attesa.Area.x=(finestra.w-attesa.Area.w)/2;
     attesa.Area.y=stop.Area.y+stop.Area.h+MARGINE;
-
+    
     SDL_Point tocco{0,0};
     bool quit=false,NewPage=true;
     SDL_Event event;
-
-    #pragma endregion
-    #pragma region SOCKET
     //lettura del file ip.txt in cui è scritto l'ip dell'ESP32
-   file.open("file_modificabili/ip.txt");
+    file.open("file_modificabili/ip.txt");
     std::string ip;
     std::getline(file,ip);
     std::cout<<ip<<"\n";
     file.close();
     //creo il socket per poter fare la comunicazione con l'ESP32
-    /*
-    int iResult=0;
-    int Sock=socket(AF_INET,SOCK_STREAM,0);
-    if(Sock==-1){
-        std::cerr<<"errore nella creazione del socket\n";
-        exit(1);
-    }
-    sockaddr_in hint;
-    hint.sin_family = AF_INET;
-    hint.sin_port = htons(PORT);
-    inet_pton(AF_INET,ip.c_str(),&hint.sin_addr);
-    iResult = connect(sock,(sockaddr*)&hint,sizeof(hint));
-    if(iResult==-1){
-        std::cerr<<"errore nella connesione con il server";
-    }*/
+    SOCKET s = INVALID_SOCKET;
+    std::thread connesione(Connesione,std::ref(s));
+    connesione.join();
    //creazione del buffer che conterà i dati da mandare
-   int size=sizeof(bool)*5+1;
-   char *buffer=new char[size];
+   int size=6;
+   unsigned char buffer[size];
    //variabile che gestirà il quando mandare i dati quando no
    bool invia=false;
    //variabile che serve nel caso i dati non siano stati inviati non aggiorni l'UI
    bool inviato=false;
    //variabili che verranno inviate all'ESP32
    bool BuffAvv=false,BuffIndi=false,BuffMode1=false,BuffMode2=false,allarme=false;
-   #pragma endregion
    //parte dall'indirizzo della memoria del buffer e da li mette i dati delle varie variabili
-    memcpy(buffer,&BuffAvv,sizeof(bool));
-    memcpy(buffer+sizeof(bool),&BuffIndi,sizeof(bool));
-    memcpy(buffer+sizeof(bool)*2,&BuffMode1,sizeof(bool));
-    memcpy(buffer+sizeof(bool)*3,&BuffMode2,sizeof(bool));
-    memcpy(buffer+sizeof(bool)*4,&allarme,sizeof(bool));
-    memcpy(buffer+sizeof(bool)*5,"\0",1);
-    // iResult=send(Sock,buffer,size,0);
-    //  //sistema per verificare lo stato con il motore
-    // if(iResult==-1){
-    //     std::cerr<<"impossibile mandare il messaggio\n";
-    //    ClientState.UpdateText("Stato motore: Sconnesso");
-    //    inviato=false;
-    // }
-    //else{
-    //    ClientState.UpdateText("Stato motore: Connesso");                            
-    //    inviato=true;
-    //}
+    buffer[0]=BuffAvv;
+    buffer[1]=BuffIndi;
+    buffer[2]=BuffMode1;
+    buffer[3]=BuffMode2;
+    buffer[4]=allarme;
+    buffer[5]='\0';
+    iResult=send(s,(const char *)buffer,size,0);
+     //sistema per verificare lo stato con il motore
+    if(iResult==-1){
+        std::cerr<<"impossibile mandare il messaggio\n";
+        ClientState.UpdateText("Stato motore: Sconnesso",finestra.w,finestra.h);
+        ClientState.Area.x=finestra.w-ClientState.Area.w-MARGINE;
+        ClientState.Area.y=finestra.h-ClientState.Area.h-MARGINE;
+        inviato=false;
+        connesione.join();
+    }
+    else{
+       ClientState.UpdateText("Stato motore: Connesso",finestra.w,finestra.h);
+        ClientState.Area.x=finestra.w-ClientState.Area.w-MARGINE;
+        ClientState.Area.y=finestra.h-ClientState.Area.h-MARGINE;
+       inviato=true;
+    }
     //è nell loop fi quando non si chiude la finestra
-    uint8_t tipoGiostra;
+    uint8_t tipoGiostra{1};
+    bool P_Rvideo{false};
+    cv::VideoCapture V_Giostra1("video/giostra1.mp4");
+    cv::VideoCapture V_Giostra2("video/giostra1.mp4");
+    cv::VideoCapture V_Giostra3("video/giostra1.mp4");
+    int w{0};
+    int h{0};
+    SDL_Texture* texture_video {nullptr};
+    CurrentScreen=Schermate::Giostre;
+    cv::Mat frame;
+    float delay=0;
     while(!quit){
         while(SDL_PollEvent(&event)){
             if(event.type==SDL_QUIT){
@@ -413,7 +454,8 @@ int main() {
                 //prende la posizione del mouse
                 SDL_GetMouseState(&tocco.x,&tocco.y);
                 //se è stato premuto il pulsante di chiusura e chiude
-                if(close.Click(tocco,true,mode1.stato,mode2.stato)){
+                if(close_.Click(tocco,!P_Rvideo,mode1.stato,mode2.stato)){
+                    std::cout<<"sto chiudendo\n";
                     //imposta tutti i pulsanti sul verde,gli disativa e imposta i dati che verranno inviati tutti su false
                     avanti.stato=true;
                     avanti.attivo=false;
@@ -437,48 +479,59 @@ int main() {
                     allarme=true;
 
                     //prepara il buffer
-                    memcpy(buffer,&BuffAvv,sizeof(bool));
-                    memcpy(buffer+sizeof(bool),&BuffIndi,sizeof(bool));
-                    memcpy(buffer+sizeof(bool)*2,&BuffMode1,sizeof(bool));
-                    memcpy(buffer+sizeof(bool)*3,&BuffMode2,sizeof(bool));
-                    memcpy(buffer+sizeof(bool)*4,&allarme,sizeof(bool));
-                    memcpy(buffer+sizeof(bool)*5,"\0",1);
+                    buffer[0]=BuffAvv;
+                    buffer[1]=BuffIndi;
+                    buffer[2]=BuffMode1;
+                    buffer[3]=BuffMode2;
+                    buffer[5]=allarme;
+                    buffer[6]='\0';
                     //imposta l'allarme su false tanto verrà inviata la variabile buffer
                     allarme=false;
-                    // iResult=send(Sock,buffer,size,0);
-                    // if(iResult==-1){
-                    //     std::cerr<<"impossibile mandare il messaggio\n";
-                    //    ClientState.UpdateText("Stato motore: Sconnesso");
-                    //    inviato=false;
-                    // }
-                    //else{
-                    //    ClientState.UpdateText("Stato motore: Connesso");                            
-                    //    inviato=true;
-                    //}
+                    iResult=send(s,(const char *)buffer,size,0);
+                    if(iResult==-1){
+                        std::cerr<<"impossibile mandare il messaggio\n";
+                       ClientState.UpdateText("Stato motore: Sconnesso",finestra.w,finestra.h);
+                        ClientState.Area.x=finestra.w-ClientState.Area.w-MARGINE;
+                        ClientState.Area.y=finestra.h-ClientState.Area.h-MARGINE;
+                       inviato=false;
+                    }
+                    else{
+                       ClientState.UpdateText("Stato motore: Connesso",finestra.w,finestra.h);                            
+                        ClientState.Area.x=finestra.w-ClientState.Area.w-MARGINE;
+                        ClientState.Area.y=finestra.h-ClientState.Area.h-MARGINE;
+                       inviato=true;
+                    }
                     //renderizza i pulsanti disattivati
                     SDL_RenderClear(finestra.Renderer);
                     SDL_RenderCopy(finestra.Renderer,finestra.Texture,nullptr,nullptr);
                     titolo.Render();
-                    close.Render();
+                    close_.Render();
                     switch (CurrentScreen)
                     {
                         case Giostre:
-                        Giostra1.Render();
-                        Giostra2.Render();
-                        Giostra3.Render();
-                        attesa.Area.y=Giostra3.Area_sfondo.x+Giostra3.Area_sfondo.h+finestra.h/MARGINE*3;
+                            Giostra1.Render();
+                            Giostra2.Render();
+                            Giostra3.Render();
+                            attesa.Area.y=Giostra3.Area_sfondo.x+Giostra3.Area_sfondo.h+finestra.h/MARGINE*3;
                         break;
-                        
+                        case Video:{
+                            P_Rvideo=!P_Rvideo;
+                            if(indietro_v.Click2(tocco)){
+                                CurrentScreen=Schermate::Motore;
+                                NewPage=true;
+                            }
+                        break;
+                        }
                         case Motore:
-                        avanti.Render();
-                        indietro.Render();
-                        ClientState.Render();
-                        mode1.Render();
-                        mode2.Render();
-                        close.Render();
-                        stop.Render();
-                        video_b.Render();
-                        attesa.Area.y=stop.Area.y+stop.Area.h+MARGINE;
+                            avanti.Render();
+                            indietro.Render();
+                            ClientState.Render();
+                            mode1.Render();
+                            mode2.Render();
+                            close_.Render();
+                            stop.Render();
+                            video_b.Render();
+                            attesa.Area.y=stop.Area.y+stop.Area.h+MARGINE;
                         break;
                     }
                     attesa.Render();
@@ -508,11 +561,19 @@ int main() {
                         break;
                     }
                     case Video:{
+                        P_Rvideo=!P_Rvideo;
+                        if(indietro_v.Click2(tocco)){
+                            P_Rvideo=false;
+                            CurrentScreen=Schermate::Motore;
+                            NewPage=true;
+                        }
+                    break;
                     }
                     case Motore:{
                         if(video_b.Click2(tocco)){
                             CurrentScreen=Video;
                             NewPage=true;
+                            P_Rvideo=true;
                         }
                         //se era sul pulsante di stop attiva la procedura
                         if(stop.Click(tocco,true,mode1.stato,mode2.stato)){
@@ -539,24 +600,28 @@ int main() {
                             allarme=true;
 
                             //prepara il buffer
-                            memcpy(buffer,&BuffAvv,sizeof(bool));
-                            memcpy(buffer+sizeof(bool),&BuffIndi,sizeof(bool));
-                            memcpy(buffer+sizeof(bool)*2,&BuffMode1,sizeof(bool));
-                            memcpy(buffer+sizeof(bool)*3,&BuffMode2,sizeof(bool));
-                            memcpy(buffer+sizeof(bool)*4,&allarme,sizeof(bool));
-                            memcpy(buffer+sizeof(bool)*5,"\0",1);
+                            buffer[0]=BuffAvv;
+                            buffer[1]=BuffIndi;
+                            buffer[2]=BuffMode1;
+                            buffer[3]=BuffMode2;
+                            buffer[5]=allarme;
+                            buffer[6]='\0';
                             //imposta l'allarme su false tanto verrà inviata la variabile buffer
                             allarme=false;
-                            // iResult=send(Sock,buffer,size,0);
-                            // if(iResult==-1){
-                            //     std::cerr<<"impossibile mandare il messaggio\n";
-                            //    ClientState.UpdateText("Stato motore: Sconnesso");
-                            //    inviato=false;
-                            // }
-                            //else{
-                            //    ClientState.UpdateText("Stato motore: Connesso");                            
-                            //    inviato=true;
-                            //}
+                            iResult=send(s,(const char *)buffer,size,0);
+                            if(iResult==-1){
+                                std::cerr<<"impossibile mandare il messaggio\n";
+                               ClientState.UpdateText("Stato motore: Sconnesso",finestra.w,finestra.h);
+                                ClientState.Area.x=finestra.w-ClientState.Area.w-MARGINE;
+                                ClientState.Area.y=finestra.h-ClientState.Area.h-MARGINE;
+                               inviato=false;
+                            }
+                            else{
+                                ClientState.UpdateText("Stato motore: Connesso",finestra.w,finestra.h);                            
+                                ClientState.Area.x=finestra.w-ClientState.Area.w-MARGINE;
+                                ClientState.Area.y=finestra.h-ClientState.Area.h-MARGINE;
+                                inviato=true;
+                            }
                             //renderizza i pulsanti disattivati
                             SDL_RenderClear(finestra.Renderer);
                             SDL_RenderCopy(finestra.Renderer,finestra.Texture,nullptr,nullptr);
@@ -566,7 +631,7 @@ int main() {
                             ClientState.Render();
                             mode1.Render();
                             mode2.Render();
-                            close.Render();
+                            close_.Render();
                             stop.Render();
                             video_b.Render();
                             attesa.Render();
@@ -603,60 +668,63 @@ int main() {
                         if((!avanti.stato||!indietro.stato)&&mode2.stato){
                             mode1.stato=false;
                         }
-                        //invia i dati al ESP32
-                    if(invia){
+                    //invia i dati al ESP32
+                    if(inviato){
                         //calcola il valore delle variabili che verranno inviate
                         BuffAvv=!avanti.stato;
                         BuffIndi=!indietro.stato;
-                        if(BuffAvv&&!mode1.stato||!BuffAvv){
-                            BuffMode1=false;
-                        }else if(BuffAvv&&!mode2.stato){
-                            BuffMode1=true;
-                        }
-                        if(BuffIndi&&!mode1.stato||!BuffIndi){
-                            BuffMode2=false;
-                        }else if(BuffIndi&&!mode2.stato){
-                            BuffMode2=true;
-                        }
-                        BuffMode2!=mode2.stato;
+                        BuffMode1=!mode1.stato;
+                        BuffMode2=!mode2.stato;
                         //prepare il buffer
-                        memcpy(buffer,&BuffAvv,sizeof(bool));
-                        memcpy(buffer+sizeof(bool),&BuffIndi,sizeof(bool));
-                        memcpy(buffer+sizeof(bool)*2,&BuffMode1,sizeof(bool));
-                        memcpy(buffer+sizeof(bool)*3,&BuffMode2,sizeof(bool));
-                        memcpy(buffer+sizeof(bool)*4,&allarme,sizeof(bool));
-                        memcpy(buffer+sizeof(bool)*5,"\0",1);
-                        std::cout<<"avanti: "<<BuffAvv<<"\t\t velocita': "<<BuffMode1<<"\n";
+                        buffer[0]=BuffAvv;
+                        buffer[1]=BuffIndi;
+                        buffer[2]=BuffMode1;
+                        buffer[3]=BuffMode2;
+                        buffer[5]=allarme;
+                        buffer[6]='\0';
+                        for(size_t i=0;i<size;++i){
+                            std::cout<<static_cast<int>(buffer[i]);
+                        }
+                        std::cout<<"\n\navanti: "<<BuffAvv<<"\t\t velocita': "<<BuffMode1<<"\n";
                         std::cout<<"indietro: "<<BuffIndi<<"\t\t velocita': "<<BuffMode2<<"\n\n\n\n";
-                        // iResult=send(Sock,buffer,size,0);
-                        // if(iResult==-1){
-                            //     std::cerr<<"impossibile mandare il messaggio\n";
-                            //    ClientState.UpdateText("Stato motore: Sconnesso");
-                            //    inviato=false;
-                            // }
-                            //else{
-                                //    ClientState.UpdateText("Stato motore: Connesso");                            
-                                //    inviato=true;
-                            //}
-                             //se i dati sono stati inviati allora aggiorna l'UI
-                            invia=false;
+                        iResult=send(s,(const char *)buffer,size,0);
+                        if(iResult==-1){
+                            std::cerr<<"impossibile mandare il messaggio\n";
+                            ClientState.UpdateText("Stato motore: Sconnesso",finestra.w,finestra.h);
+                            ClientState.Area.x=finestra.w-ClientState.Area.w-MARGINE;
+                            ClientState.Area.y=finestra.h-ClientState.Area.h-MARGINE;
+                            inviato=false;
                         }
-                        if(inviato){
-                            if(!avanti.stato){
-                                BuffAvv=true;
-                                if(!mode1.stato)
-                                BuffMode1=false;
-                                if(!mode2.stato)
-                                BuffMode1=true;
-                            }
-                            if(!indietro.stato){
-                                BuffAvv=true;
-                                if(!mode1.stato)
-                                BuffMode2=false;
-                                if(!mode2.stato)
-                                BuffMode2=true;
-                            }
+                        else{
+                            ClientState.UpdateText("Stato motore: Connesso",finestra.w,finestra.h);
+                            ClientState.Area.x=finestra.w-ClientState.Area.w-MARGINE;
+                            ClientState.Area.y=finestra.h-ClientState.Area.h-MARGINE;
+                            inviato=true;
                         }
+                        //se i dati sono stati inviati allora aggiorna l'UI
+                        invia=false;
+                        }
+                        // if(inviato){
+                        //     if(!avanti.stato){
+                        //         BuffAvv=true;
+                        //         if(!mode1.stato)
+                        //         BuffMode1=false;
+                        //         if(!mode2.stato)
+                        //         BuffMode1=true;
+                        //     }
+                        //     if(!indietro.stato){
+                        //         BuffAvv=true;
+                        //         if(!mode1.stato)
+                        //         BuffMode2=false;
+                        //         if(!mode2.stato)
+                        //         BuffMode2=true;
+                        //     }
+                        // }
+                        std::cout<<BuffAvv;
+                        std::cout<<BuffIndi;
+                        std::cout<<BuffMode1;
+                        std::cout<<BuffMode2;
+                        std::cout<<allarme<<"\n\n";
                         break;
                     }
                 }
@@ -670,7 +738,6 @@ int main() {
             case Giostre:{
                 if(NewPage){
                     titolo.UpdateText("Scegli la giostra che vuoi",finestra.w,finestra.h);
-                    NewPage=false;
                 }
                 titolo.Render();
                 Giostra1.Render();
@@ -678,10 +745,72 @@ int main() {
                 Giostra3.Render();
                 break;
             }
+            case Video:{
+                if(NewPage){
+                    switch (tipoGiostra)
+                    {
+                    case 1:
+                        w = static_cast<int>(V_Giostra1.get(cv::CAP_PROP_FRAME_WIDTH));
+                        h = static_cast<int>(V_Giostra1.get(cv::CAP_PROP_FRAME_HEIGHT));
+                    break;
+                    case 2:
+                        w = static_cast<int>(V_Giostra2.get(cv::CAP_PROP_FRAME_WIDTH));
+                        h = static_cast<int>(V_Giostra2.get(cv::CAP_PROP_FRAME_HEIGHT));
+                    break;
+                    case 3:
+                        w = static_cast<int>(V_Giostra3.get(cv::CAP_PROP_FRAME_WIDTH));
+                        h = static_cast<int>(V_Giostra3.get(cv::CAP_PROP_FRAME_HEIGHT));
+                    break;
+                    }
+                    texture_video=SDL_CreateTexture(finestra.Renderer,SDL_PIXELFORMAT_BGR24,SDL_TEXTUREACCESS_STREAMING,w, h);
+                }
+                if(P_Rvideo){
+                    switch (tipoGiostra)
+                    {
+                    case 1:
+                        if(!V_Giostra1.isOpened()){
+                            std::cout<<"impossibile aprire il video\n";
+                        }
+                        if (!V_Giostra1.read(frame)) {
+                            // Video finito, ricomincia dall'inizio
+                            V_Giostra1.set(cv::CAP_PROP_POS_FRAMES, 0);
+                            continue;
+                        }
+                        V_Giostra1.read(frame);
+                    break;
+                    case 2:
+                        if(!V_Giostra2.isOpened()){
+                            std::cout<<"impossibile aprire il video\n";
+                        }
+                        if (!V_Giostra2.read(frame)) {
+                            // Video finito, ricomincia dall'inizio
+                            V_Giostra2.set(cv::CAP_PROP_POS_FRAMES, 0);
+                            continue;
+                        }
+                        V_Giostra2.read(frame);
+                    break;
+                    case 3:
+                        if(!V_Giostra3.isOpened()){
+                            std::cout<<"impossibile aprire il video\n";
+                        }
+                        if (!V_Giostra3.read(frame)) {
+                            // Video finito, ricomincia dall'inizio
+                            V_Giostra3.set(cv::CAP_PROP_POS_FRAMES, 0);
+                            continue;
+                        }
+                        V_Giostra3.read(frame);
+                    break;
+                    }
+                    SDL_UpdateTexture(texture_video, nullptr, frame.data, frame.step);
+                }
+                SDL_RenderCopy(finestra.Renderer, texture_video, nullptr, nullptr);
+                if(!P_Rvideo)
+                    indietro_v.Render();
+                break;
+            }
             case Motore:{
                 if(NewPage){
                     titolo.UpdateText("Schermata controllo giostra",finestra.w,finestra.h);
-                    NewPage=false;
                 }
                 titolo.Render();
                 avanti.Render();
@@ -694,14 +823,40 @@ int main() {
                 break;
             }
         }
-        close.Render();        
+        if(CurrentScreen!=Schermate::Video)
+            close_.Render();
         SDL_RenderPresent(finestra.Renderer);
-        //fa girare tutti a 60fps 1000/60=16
-        SDL_Delay(16);
+        if(CurrentScreen!=Schermate::Video){
+            if(NewPage){
+                delay=1000/30;
+                NewPage=false;
+            }
+        }else{
+            if(NewPage){
+                switch (tipoGiostra)
+                {
+                case 1:
+                    delay=1000/V_Giostra1.get(cv::CAP_PROP_FPS);
+                break;
+                case 2:
+                    delay=1000/V_Giostra2.get(cv::CAP_PROP_FPS);
+                break;
+                case 3:
+                    delay=1000/V_Giostra3.get(cv::CAP_PROP_FPS);
+                break;
+            }
+            NewPage=false;
+            }
+        }
+        SDL_Delay(delay);
     }
     //libera memoria
-    delete[] buffer;
-//  close(Sock);
+    V_Giostra1.release();
+    V_Giostra2.release();
+    V_Giostra3.release();
+    SDL_DestroyTexture(texture_video);
+    texture_video=nullptr;
+    closesocket(s);
     //deinizializza le robe di SDL
     IMG_Quit();
     TTF_Quit();
