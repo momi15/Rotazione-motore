@@ -23,7 +23,7 @@
 #define Y_BOTTONI 4
 #define MARGINE 100
 #define RIDUTTORE 0.5
-#define ATTESA 3500
+#define ATTESA 1500
 
 //macro per la connesione di rete
 #define PORT "27016"
@@ -76,12 +76,12 @@ struct Button
 {
     SDL_Rect Area{0,0,0,0};
     SDL_Renderer *Sfondo{nullptr};
-    SDL_Texture *ON{nullptr},*OFF{nullptr},*passivo{nullptr};
+    SDL_Texture *ON{nullptr},*OFF{nullptr};
     SDL_Renderer *Renderer=nullptr;
     bool stato=true,attivo=true;
     
     //costructor del bottone
-    Button(const char *ON_path,const char *OFF_path,const char *Passive_path,size_t offsetY,size_t offsetX,size_t h_screen,size_t w_screen,SDL_Renderer *&Renderer_Screen){
+    Button(const char *ON_path,const char *OFF_path,size_t offsetY,size_t offsetX,size_t h_screen,size_t w_screen,SDL_Renderer *&Renderer_Screen){
         Renderer=Renderer_Screen;
         //carica l'immagine con il bottone verde
         SDL_Surface *Surf=IMG_Load(ON_path);
@@ -99,13 +99,6 @@ struct Button
         SDL_FreeSurface(Surf);
         Surf=nullptr;
         
-        //carica l'immagine con il bottone grigio
-        Surf=IMG_Load(Passive_path);
-        controllo(Surf);
-        passivo=SDL_CreateTextureFromSurface(Renderer,Surf);
-        SDL_FreeSurface(Surf);
-        Surf=nullptr;
-
         Area.y=h_screen/ALTEZZA_S_BOTTONI+offsetY;
         Area.x=w_screen/MARGINE+offsetX;
     }
@@ -123,31 +116,24 @@ struct Button
     //funzione per renderizzare il bottone
     void Render(){
         //se il bottone è attivo scegle in base allo stato (quindi se è stato schiacciato o meno) quale far vedere
-        if(attivo){
-            if(stato){
-                SDL_RenderCopy(Renderer,ON,nullptr,&Area);
-            }else{
-                SDL_RenderCopy(Renderer,OFF,nullptr,&Area);
-            }
-        //se invece non è attivo quindi il tasto è stato disattivato lo fa vedere grigio
+        if(stato){
+            SDL_RenderCopy(Renderer,ON,nullptr,&Area);
         }else{
-            SDL_RenderCopy(Renderer,passivo,nullptr,&Area);
+            SDL_RenderCopy(Renderer,OFF,nullptr,&Area);
         }
     }
     //controllo se è stato cliccato 
-    bool Click(SDL_Point tocco,bool alterego,bool &mode1,bool &mode2){
+    bool Click(SDL_Point tocco,bool &alterego,bool &mode1,bool &mode2){
         //se il click era nell'area del pulsante e il pulsante opposto non è stato schiacciato il pulsante fa vedere la texture rossa
-        if(tocco.x>Area.x&&tocco.x<Area.x+Area.w&&tocco.y>Area.y&&tocco.y<Area.y+Area.h&&alterego){
+        if(tocco.x>Area.x&&tocco.x<Area.x+Area.w&&tocco.y>Area.y&&tocco.y<Area.y+Area.h){
             stato=false;
             if(mode2){
                 mode1=false;
             }
-            if(!attivo) attivo=true;
+            if(!alterego){
+                alterego=true;
+            }            
             return true;
-        }
-        //se invece l'alterego è stato schiacciato il tasto si disattiva
-        if(!alterego){
-            attivo=false;
         }
         //se il click non è nell'area del pulsante allora returna false
         return false;
@@ -160,47 +146,61 @@ struct Button
         return false;
     }
 };
+//pulsante con lo sfondo che si regola in base alla scritta 
 struct RideButton
 {
+    //texture della scritta e dello sfondo
     SDL_Texture *Scritta_t{nullptr},*Sfondo_t{nullptr};
+    //area in cui si estende lo sfondo
     SDL_Rect Area_sfondo{0,0,0,0};
+    //area in cui si estende il testo
     SDL_FRect Area_txt{.0f,.0f,.0f,.0f};
+    //renderer dello schermo che viene preso quando viene inizializzata la struttura
     SDL_Renderer *Renderer{nullptr};
+    //font della scritta
     TTF_Font *font{nullptr};
+    //costructor
     RideButton(const char* Name,const char* Background_path,size_t w_screen,size_t h_screen,SDL_Renderer *&Renderer_screen,size_t TextSize,size_t offsetY,size_t ProporzioneMargine){
+        //preso renderer dello schermo
         Renderer=Renderer_screen;
+        //importa il font
         font=TTF_OpenFont("font/font.ttf",h_screen/ALTEZZA_TITOLO*TextSize);
+        //controllo sia stato importato correttamente
         controllo(font);
-
+        //variabile temporanea per creare le texture
         SDL_Surface *surf=nullptr;
         surf=TTF_RenderText_Solid(font,Name,{0,0,0,255});
+        //controllo sia stato stato creato correttamente il font
         controllo(surf);
 
         Area_txt.h=surf->h;
         Area_txt.w=surf->w;
-
+        // creazione texture della scritta
         Scritta_t=SDL_CreateTextureFromSurface(Renderer,surf);
         SDL_FreeSurface(surf);
         controllo(Scritta_t);
-
+        //importazione sfondo
         surf=IMG_Load(Background_path);
         controllo(surf);
+
         Area_sfondo.h=surf->h;
         Area_sfondo.w=surf->w;
+
+        //creazione texture dello sfondo
         Sfondo_t=SDL_CreateTextureFromSurface(Renderer,surf);
         SDL_FreeSurface(surf);
         controllo(Sfondo_t);
-        size_t costante=Area_sfondo.w/Area_sfondo.h;
 
+        //calcolo di quanto deve aumentare lo sfondo
         Area_sfondo.w=Area_txt.w+MARGINE*ProporzioneMargine;
         Area_sfondo.h=Area_txt.h+MARGINE*ProporzioneMargine;
-
+        //posizionamento dello pulsante
         Area_sfondo.x=(w_screen-Area_sfondo.w)/2;
         Area_sfondo.y=offsetY+MARGINE;
-
         Area_txt.x=Area_sfondo.x+MARGINE*ProporzioneMargine/2;
         Area_txt.y=Area_sfondo.y+MARGINE*ProporzioneMargine/2;
     }
+    //destructor
     ~RideButton(){
         SDL_DestroyTexture(Scritta_t);
         Scritta_t=nullptr;
@@ -209,6 +209,7 @@ struct RideButton
         SDL_DestroyRenderer(Renderer);
         Renderer=nullptr;
     }
+    //funzione per renderizzare il testo
     void Render(){
         SDL_RenderCopy(Renderer,Sfondo_t,nullptr,&Area_sfondo);
         SDL_RenderCopyF(Renderer,Scritta_t,nullptr,&Area_txt);
@@ -278,27 +279,36 @@ struct  Text
         controllo(Scritta_T);
     }
 };
-void Connesione(SOCKET &s){
+//funzione per collegarsi al server
+void Connesione(SOCKET &s,const char* ip){
     if(s!=INVALID_SOCKET){
         closesocket(s);
         s=INVALID_SOCKET;
     }
+    //variabile che conserverà il risultato dei vari protocolli
     int iResult=0;
+    //variabili che conserveranno il tipo di protocollo di rete e le informazioni del server
     struct addrinfo *result=nullptr,*ptr=nullptr,hints;
     ZeroMemory(&hints,sizeof(hints));
+    //impostiamo che vogliamo fare una connesione TCP
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
+    //continua a cercare di collegarsi al server fi quando non trova una connesione
     do{
-        iResult=getaddrinfo("192.168.4.1",PORT,&hints,&result);
+        //prende le informazioni dell server e le salva in hints e result
+        iResult=getaddrinfo(ip,PORT,&hints,&result);
         if(iResult!=0){
             std::cout<<"getaddrinfo failed "<<WSAGetLastError()<<"\n";
         }
+        //ptr è una lista che scorre alla ricerca di una connesione valida
         for(ptr=result;ptr!=nullptr;ptr=ptr->ai_next){
+            //si cerca di creare una connesione al server
             s = socket(ptr->ai_family,ptr->ai_socktype,ptr->ai_protocol);
             if(s==INVALID_SOCKET){
                 std::cout<<"socket failed with error: "<<WSAGetLastError()<<"\n";
             }
+            //prova ad utilizzare la connesione trovata prima per connetersi al server
             iResult=connect(s,ptr->ai_addr,(int)ptr->ai_addrlen);
             if(iResult==SOCKET_ERROR){
                 std::cout<<"connection failed with error "<<WSAGetLastError()<<"\n";
@@ -308,10 +318,12 @@ void Connesione(SOCKET &s){
             }
             break;
         }
+        //libera la memoria che tiene salvato il risultato della ricerca
         freeaddrinfo(result);
     }while(s==INVALID_SOCKET);
 }
 int main() {
+    //inizializza winsock2
     WSADATA wsaData;
     int iResult=WSAStartup(MAKEWORD(2,2),&wsaData);
     if(iResult!=0){
@@ -347,16 +359,19 @@ int main() {
          ClientState("Stato motore: Disconnesso",finestra.w,finestra.h,finestra.Renderer,1),
          attesa("attendere...",finestra.w,finestra.h,finestra.Renderer,1);
     //definizioni dei vari bottoni schermata Motore
-    Button avanti("img/avanti_on.jpg"/*bottone non schiacciato*/,"img/avanti_off.jpg"/*bottone schiacciato*/,"img/avanti_passive.jpg"/*bottone disattivato*/,titolo.Area.h+finestra.h/MARGINE /*offsetY*/                 ,MARGINE/*offsetX*/                         ,finestra.h,finestra.w,finestra.Renderer),
-           indietro("img/avanti_on.jpg"/*bottone non schiacciato*/,"img/avanti_off.jpg"/*bottone schiacciato*/,"img/avanti_passive.jpg"/*bottone disattivato*/,titolo.Area.h+finestra.h/MARGINE+avanti.Area.h*2/*offsetY*/,MARGINE/*offsetX*/                         ,finestra.h,finestra.w,finestra.Renderer),
-           mode1("img/avanti_on.jpg"/*bottone non schiacciato*/,"img/avanti_off.jpg"/*bottone schiacciato*/,"img/avanti_passive.jpg"/*bottone disattivato*/,titolo.Area.h+finestra.h/MARGINE /*offsetY*/                  ,finestra.w-MARGINE-avanti.Area.w/*offsetX*/,finestra.h,finestra.w,finestra.Renderer),
-           mode2("img/avanti_on.jpg"/*bottone non schiacciato*/,"img/avanti_off.jpg"/*bottone schiacciato*/,"img/avanti_passive.jpg"/*bottone disattivato*/,titolo.Area.h+finestra.h/MARGINE+avanti.Area.h*2/*offsetY*/   ,finestra.w-MARGINE-avanti.Area.w/*offsetX*/,finestra.h,finestra.w,finestra.Renderer),
-           close_("img/close.png","img/close.png","img/close.png",0,0,finestra.h,finestra.w,finestra.Renderer),
-           stop("img/avanti_on.jpg"/*bottone non schiacciato*/,"img/avanti_on.jpg"/*bottone schiacciato*/,"img/avanti_passive.jpg"/*bottone disattivato*/,0,0,finestra.h,finestra.w,finestra.Renderer),
-           video_b("img/avanti_on.jpg","img/avanti_on.jpg","img/avanti_passive.jpg",0,0,finestra.h,finestra.w,finestra.Renderer),
-           indietro_v("img/avanti_on.jpg","img/avanti_on.jpg","img/avanti_passive.jpg",0,0,finestra.h,finestra.w,finestra.Renderer);
+    Button avanti("img/avanti_on.jpg"/*bottone non schiacciato*/,"img/avanti_off.jpg"/*bottone schiacciato*/,titolo.Area.h+finestra.h/MARGINE /*offsetY*/                 ,MARGINE/*offsetX*/                         ,finestra.h,finestra.w,finestra.Renderer),
+           indietro("img/avanti_on.jpg"/*bottone non schiacciato*/,"img/avanti_off.jpg"/*bottone schiacciato*/,titolo.Area.h+finestra.h/MARGINE+avanti.Area.h*2/*offsetY*/,MARGINE/*offsetX*/                         ,finestra.h,finestra.w,finestra.Renderer),
+           mode1("img/avanti_on.jpg"/*bottone non schiacciato*/,"img/avanti_off.jpg"/*bottone schiacciato*/,titolo.Area.h+finestra.h/MARGINE /*offsetY*/                  ,finestra.w-MARGINE-avanti.Area.w/*offsetX*/,finestra.h,finestra.w,finestra.Renderer),
+           mode2("img/avanti_on.jpg"/*bottone non schiacciato*/,"img/avanti_off.jpg"/*bottone schiacciato*/,titolo.Area.h+finestra.h/MARGINE+avanti.Area.h*2/*offsetY*/   ,finestra.w-MARGINE-avanti.Area.w/*offsetX*/,finestra.h,finestra.w,finestra.Renderer),
+           close_("img/close.png","img/close.png",0,0,finestra.h,finestra.w,finestra.Renderer),
+           stop("img/avanti_on.jpg"/*bottone non schiacciato*/,"img/avanti_on.jpg"/*bottone schiacciato*/,0,0,finestra.h,finestra.w,finestra.Renderer),
+           video_b("img/avanti_on.jpg","img/avanti_on.jpg",0,0,finestra.h,finestra.w,finestra.Renderer),
+           indietro_v("img/avanti_on.jpg","img/avanti_on.jpg",0,0,finestra.h,finestra.w,finestra.Renderer);
+    //variabili per la gestione dei nomi sulle giostre
     std::string giostre_s[3],leggi;
+    //apre il file con il nome delle giostre
     std::ifstream file("file_modificabili/giostre.txt");
+    //legge il file e prende i 3 nomi
     for(uint8_t i=0;std::getline(file,leggi);++i){
         giostre_s[i]=leggi;
     }
@@ -364,6 +379,7 @@ int main() {
     RideButton Giostra1(giostre_s[0].c_str(),"img/sfondo_pulsante_giostra1.jpg",finestra.w,finestra.h,finestra.Renderer,1,MARGINE,1),
                Giostra2(giostre_s[1].c_str(),"img/sfondo_pulsante_giostra1.jpg",finestra.w,finestra.h,finestra.Renderer,1,Giostra1.Area_sfondo.h+Giostra1.Area_sfondo.y,1),
                Giostra3(giostre_s[2].c_str(),"img/sfondo_pulsante_giostra1.jpg",finestra.w,finestra.h,finestra.Renderer,1,Giostra2.Area_sfondo.h+Giostra2.Area_sfondo.y,1);
+    //pulisce la memoria dato che queste variabili non saranno più utilizate
     for(size_t i=0;i<3;++i){
         giostre_s[i].clear();
     }
@@ -386,19 +402,25 @@ int main() {
     //imposto la posizione della scritta dell'attesa
     attesa.Area.x=(finestra.w-attesa.Area.w)/2;
     attesa.Area.y=stop.Area.y+stop.Area.h+MARGINE;
-    
+    //variabile che salverà la posizione del tocco
     SDL_Point tocco{0,0};
+    //prima var per chiudere la schermata la seconda variabile serve per gestire il passaggio da una pagina all'altra
     bool quit=false,NewPage=true;
+    //variabli per prendere traccia degli eventi che accandono mentre la finestra è aperta
     SDL_Event event;
     //lettura del file ip.txt in cui è scritto l'ip dell'ESP32
     file.open("file_modificabili/ip.txt");
+    //var in cui sarà salvato l'ip
     std::string ip;
+    //legge la prima riga del file
     std::getline(file,ip);
-    std::cout<<ip<<"\n";
+    //libera la memoria perchè non useremo più la classe file
     file.close();
     //creo il socket per poter fare la comunicazione con l'ESP32
     SOCKET s = INVALID_SOCKET;
-    std::thread connesione(Connesione,std::ref(s));
+    //thread che gestirà la connesione con il server in modo che non fermi il corretto funzionamento della finestra
+    std::thread connesione(Connesione,std::ref(s),"192.168.4.1");
+    //avvia il thread in parallelo
     connesione.join();
    //creazione del buffer che conterà i dati da mandare
    int size=6;
@@ -424,7 +446,6 @@ int main() {
         ClientState.Area.x=finestra.w-ClientState.Area.w-MARGINE;
         ClientState.Area.y=finestra.h-ClientState.Area.h-MARGINE;
         inviato=false;
-        connesione.join();
     }
     else{
        ClientState.UpdateText("Stato motore: Connesso",finestra.w,finestra.h);
@@ -432,19 +453,27 @@ int main() {
         ClientState.Area.y=finestra.h-ClientState.Area.h-MARGINE;
        inviato=true;
     }
-    //è nell loop fi quando non si chiude la finestra
+    //variabile che conterà la giostra selezionata
     uint8_t tipoGiostra{1};
+    //variabli che conterà lo stato del video se è stato stoppato o meno
     bool P_Rvideo{false};
+    //variabile che conterranno i video
     cv::VideoCapture V_Giostra1("video/giostra1.mp4");
     cv::VideoCapture V_Giostra2("video/giostra1.mp4");
     cv::VideoCapture V_Giostra3("video/giostra1.mp4");
-    int w{0};
-    int h{0};
+    //variabili che conterranno la larghezza ed altezza dei frame dei video
+    int w{0}, h{0};
+    //texture che conterrà il frame da far vedere
     SDL_Texture* texture_video {nullptr};
-    CurrentScreen=Schermate::Giostre;
+    //matrice che conterrà le informazioni dei video
     cv::Mat frame;
+    //variabile che tiene nota su quale schermata siamo
+    CurrentScreen=Schermate::Giostre;
+    //variabile che conterrà il ritardo necessario per il corretto funzionamento del softwear
     float delay=0;
+    //avvia la finestra
     while(!quit){
+        //controllo degli eventi
         while(SDL_PollEvent(&event)){
             if(event.type==SDL_QUIT){
                 quit=true;
@@ -454,7 +483,8 @@ int main() {
                 //prende la posizione del mouse
                 SDL_GetMouseState(&tocco.x,&tocco.y);
                 //se è stato premuto il pulsante di chiusura e chiude
-                if(close_.Click(tocco,!P_Rvideo,mode1.stato,mode2.stato)){
+                if(CurrentScreen!=Schermate::Video){
+                    if(close_.Click2(tocco)){
                     std::cout<<"sto chiudendo\n";
                     //imposta tutti i pulsanti sul verde,gli disativa e imposta i dati che verranno inviati tutti su false
                     avanti.stato=true;
@@ -488,12 +518,14 @@ int main() {
                     //imposta l'allarme su false tanto verrà inviata la variabile buffer
                     allarme=false;
                     iResult=send(s,(const char *)buffer,size,0);
+                    //sistema di controllo per verificare che sia ancora collegato al server
                     if(iResult==-1){
                         std::cerr<<"impossibile mandare il messaggio\n";
-                       ClientState.UpdateText("Stato motore: Sconnesso",finestra.w,finestra.h);
+                        ClientState.UpdateText("Stato motore: Sconnesso",finestra.w,finestra.h);
                         ClientState.Area.x=finestra.w-ClientState.Area.w-MARGINE;
                         ClientState.Area.y=finestra.h-ClientState.Area.h-MARGINE;
-                       inviato=false;
+                        
+                        inviato=false;
                     }
                     else{
                        ClientState.UpdateText("Stato motore: Connesso",finestra.w,finestra.h);                            
@@ -506,6 +538,7 @@ int main() {
                     SDL_RenderCopy(finestra.Renderer,finestra.Texture,nullptr,nullptr);
                     titolo.Render();
                     close_.Render();
+                    //renderizza le cose in base a che schermata ci siamo
                     switch (CurrentScreen)
                     {
                         case Giostre:
@@ -536,10 +569,10 @@ int main() {
                     }
                     attesa.Render();
                     SDL_RenderPresent(finestra.Renderer);
-                    SDL_Delay(3500);
+                    SDL_Delay(ATTESA);
                     quit=true;
                 }
-                //controlla se è stato premuto il pulsante di stop se si attiva la procedura
+                }//controlla se è stato premuto un pulsante nella varie schermate
                 switch (CurrentScreen)
                 {
                     case Giostre:{
@@ -576,7 +609,7 @@ int main() {
                             P_Rvideo=true;
                         }
                         //se era sul pulsante di stop attiva la procedura
-                        if(stop.Click(tocco,true,mode1.stato,mode2.stato)){
+                        if(stop.Click2(tocco)){
                             //imposta tutti i pulsanti sul verde,gli disativa e imposta i dati che verranno inviati tutti su false
                             avanti.stato=true;
                             avanti.attivo=false;
@@ -615,6 +648,7 @@ int main() {
                                 ClientState.Area.x=finestra.w-ClientState.Area.w-MARGINE;
                                 ClientState.Area.y=finestra.h-ClientState.Area.h-MARGINE;
                                inviato=false;
+                                
                             }
                             else{
                                 ClientState.UpdateText("Stato motore: Connesso",finestra.w,finestra.h);                            
@@ -655,9 +689,7 @@ int main() {
                         }
                         //controllo se è stato schiacciato uno dei 4 pulsanti
                         if(mode2.Click(tocco,mode1.stato,mode1.stato,mode2.stato)||mode1.Click(tocco,mode2.stato,mode1.stato,mode2.stato)){
-                            if((!avanti.stato&&indietro.stato||!indietro.stato&&avanti.stato)&&(!mode1.stato&&mode2.stato||!mode2.stato&&mode1.stato)){
-                                invia=true;
-                            }
+                            invia=true;
                         }
                         //calcolo se un pulsante deve essere attivo o meno
                         avanti.attivo=indietro.stato;
@@ -682,17 +714,19 @@ int main() {
                         buffer[3]=BuffMode2;
                         buffer[5]=allarme;
                         buffer[6]='\0';
+                        //stampa il buffer che ha mandato                        
                         for(size_t i=0;i<size;++i){
                             std::cout<<static_cast<int>(buffer[i]);
                         }
-                        std::cout<<"\n\navanti: "<<BuffAvv<<"\t\t velocita': "<<BuffMode1<<"\n";
-                        std::cout<<"indietro: "<<BuffIndi<<"\t\t velocita': "<<BuffMode2<<"\n\n\n\n";
+                        std::cout<<"\n\n\n";
                         iResult=send(s,(const char *)buffer,size,0);
+                        //sistema per il controllo con la connesione al server
                         if(iResult==-1){
                             std::cerr<<"impossibile mandare il messaggio\n";
                             ClientState.UpdateText("Stato motore: Sconnesso",finestra.w,finestra.h);
                             ClientState.Area.x=finestra.w-ClientState.Area.w-MARGINE;
                             ClientState.Area.y=finestra.h-ClientState.Area.h-MARGINE;
+                            
                             inviato=false;
                         }
                         else{
@@ -704,27 +738,6 @@ int main() {
                         //se i dati sono stati inviati allora aggiorna l'UI
                         invia=false;
                         }
-                        // if(inviato){
-                        //     if(!avanti.stato){
-                        //         BuffAvv=true;
-                        //         if(!mode1.stato)
-                        //         BuffMode1=false;
-                        //         if(!mode2.stato)
-                        //         BuffMode1=true;
-                        //     }
-                        //     if(!indietro.stato){
-                        //         BuffAvv=true;
-                        //         if(!mode1.stato)
-                        //         BuffMode2=false;
-                        //         if(!mode2.stato)
-                        //         BuffMode2=true;
-                        //     }
-                        // }
-                        std::cout<<BuffAvv;
-                        std::cout<<BuffIndi;
-                        std::cout<<BuffMode1;
-                        std::cout<<BuffMode2;
-                        std::cout<<allarme<<"\n\n";
                         break;
                     }
                 }
@@ -734,8 +747,10 @@ int main() {
         SDL_RenderClear(finestra.Renderer);
         if(CurrentScreen!=Video)
         SDL_RenderCopy(finestra.Renderer,finestra.Texture,nullptr,nullptr);
+        //gestisce le varia schermata in base a dove ci troviamo
         switch(CurrentScreen){
             case Giostre:{
+                //cambia la scrita se deve renderizzare il primo frame della schermata giostre
                 if(NewPage){
                     titolo.UpdateText("Scegli la giostra che vuoi",finestra.w,finestra.h);
                 }
@@ -746,7 +761,9 @@ int main() {
                 break;
             }
             case Video:{
+                //se deve rendiziare il primo frame della schermata video
                 if(NewPage){
+                    //calcola la larghezza e l'altezza dei frame all interno dei video
                     switch (tipoGiostra)
                     {
                     case 1:
@@ -762,9 +779,12 @@ int main() {
                         h = static_cast<int>(V_Giostra3.get(cv::CAP_PROP_FRAME_HEIGHT));
                     break;
                     }
+                    //crea la texture con le specifiche che deve avere il frame
                     texture_video=SDL_CreateTexture(finestra.Renderer,SDL_PIXELFORMAT_BGR24,SDL_TEXTUREACCESS_STREAMING,w, h);
                 }
+                //se non è stato messo in pausa il video carica il frame dopo
                 if(P_Rvideo){
+                    //in base alla giostra selezionata carica il frame di quel video
                     switch (tipoGiostra)
                     {
                     case 1:
@@ -801,14 +821,18 @@ int main() {
                         V_Giostra3.read(frame);
                     break;
                     }
+                    //aggiorna la texture con i dati del frame dopo
                     SDL_UpdateTexture(texture_video, nullptr, frame.data, frame.step);
                 }
+                //renderiza la texture
                 SDL_RenderCopy(finestra.Renderer, texture_video, nullptr, nullptr);
+                //se è stato messo in pausa il video renderizza il pulsante per tornare indietro
                 if(!P_Rvideo)
                     indietro_v.Render();
                 break;
             }
             case Motore:{
+                //se deve caricare il frame della schermata per la prima volta aggiorna il titolo
                 if(NewPage){
                     titolo.UpdateText("Schermata controllo giostra",finestra.w,finestra.h);
                 }
@@ -823,9 +847,11 @@ int main() {
                 break;
             }
         }
+        //se la schermata corrente è quella del video non renderizza il pulsante per chiudere tutto
         if(CurrentScreen!=Schermate::Video)
             close_.Render();
         SDL_RenderPresent(finestra.Renderer);
+        //calcola in base gli fps da fare tipo se si trova su qualunque schermata tranne quella del video va a 30fps altrimenti usa gli fps del video
         if(CurrentScreen!=Schermate::Video){
             if(NewPage){
                 delay=1000/30;
