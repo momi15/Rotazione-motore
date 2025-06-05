@@ -76,12 +76,12 @@ struct Button
 {
     SDL_Rect Area{0,0,0,0};
     SDL_Renderer *Sfondo{nullptr};
-    SDL_Texture *ON{nullptr},*OFF{nullptr};
+    SDL_Texture *ON{nullptr},*OFF{nullptr},*passivo{nullptr};
     SDL_Renderer *Renderer=nullptr;
     bool stato=true,attivo=true;
     
     //costructor del bottone
-    Button(const char *ON_path,const char *OFF_path,size_t offsetY,size_t offsetX,size_t h_screen,size_t w_screen,SDL_Renderer *&Renderer_Screen){
+    Button(const char *ON_path,const char *OFF_path,const char *Passive_path,size_t offsetY,size_t offsetX,size_t h_screen,size_t w_screen,SDL_Renderer *&Renderer_Screen){
         Renderer=Renderer_Screen;
         //carica l'immagine con il bottone verde
         SDL_Surface *Surf=IMG_Load(ON_path);
@@ -99,6 +99,13 @@ struct Button
         SDL_FreeSurface(Surf);
         Surf=nullptr;
         
+        //carica l'immagine con il bottone grigio
+        Surf=IMG_Load(Passive_path);
+        controllo(Surf);
+        passivo=SDL_CreateTextureFromSurface(Renderer,Surf);
+        SDL_FreeSurface(Surf);
+        Surf=nullptr;
+
         Area.y=h_screen/ALTEZZA_S_BOTTONI+offsetY;
         Area.x=w_screen/MARGINE+offsetX;
     }
@@ -115,27 +122,33 @@ struct Button
     }
     //funzione per renderizzare il bottone
     void Render(){
-        //se il bottone è attivo scegle in base allo stato (quindi se è stato schiacciato o meno) quale far vedere
-        if(stato){
-            SDL_RenderCopy(Renderer,ON,nullptr,&Area);
+        if(attivo){
+            //se il bottone è attivo scegle in base allo stato (quindi se è stato schiacciato o meno) quale far vedere
+            if(stato){
+                SDL_RenderCopy(Renderer,ON,nullptr,&Area);
+            }else{
+                SDL_RenderCopy(Renderer,OFF,nullptr,&Area);
+            }
         }else{
-            SDL_RenderCopy(Renderer,OFF,nullptr,&Area);
+            SDL_RenderCopy(Renderer,passivo,nullptr,&Area);            
         }
     }
     //controllo se è stato cliccato 
     bool Click(SDL_Point tocco,bool &alterego,bool &mode1,bool &mode2){
-        //se il click era nell'area del pulsante e il pulsante opposto non è stato schiacciato il pulsante fa vedere la texture rossa
-        if(tocco.x>Area.x&&tocco.x<Area.x+Area.w&&tocco.y>Area.y&&tocco.y<Area.y+Area.h){
-            stato=false;
-            if(mode2){
-                mode1=false;
+        if(attivo){
+            //se il click era nell'area del pulsante e il pulsante opposto non è stato schiacciato il pulsante fa vedere la texture rossa
+            if(tocco.x>Area.x&&tocco.x<Area.x+Area.w&&tocco.y>Area.y&&tocco.y<Area.y+Area.h){
+                stato=false;
+                if(mode2){
+                    mode1=false;
+                }
+                if(!alterego){
+                    alterego=true;
+                }            
+                return true;
             }
-            if(!alterego){
-                alterego=true;
-            }            
-            return true;
         }
-        //se il click non è nell'area del pulsante allora returna false
+        //se il click non è nell'area del pulsante o il pulsante è disattivato allora returna false
         return false;
     }
     bool Click2(SDL_Point tocco){
@@ -359,14 +372,15 @@ int main() {
          ClientState("Stato motore: Disconnesso",finestra.w,finestra.h,finestra.Renderer,1),
          attesa("attendere...",finestra.w,finestra.h,finestra.Renderer,1);
     //definizioni dei vari bottoni schermata Motore
-    Button avanti("img/avanti_on.jpg"/*bottone non schiacciato*/,"img/avanti_off.jpg"/*bottone schiacciato*/,titolo.Area.h+finestra.h/MARGINE /*offsetY*/                 ,MARGINE/*offsetX*/                         ,finestra.h,finestra.w,finestra.Renderer),
-           indietro("img/avanti_on.jpg"/*bottone non schiacciato*/,"img/avanti_off.jpg"/*bottone schiacciato*/,titolo.Area.h+finestra.h/MARGINE+avanti.Area.h*2/*offsetY*/,MARGINE/*offsetX*/                         ,finestra.h,finestra.w,finestra.Renderer),
-           mode1("img/avanti_on.jpg"/*bottone non schiacciato*/,"img/avanti_off.jpg"/*bottone schiacciato*/,titolo.Area.h+finestra.h/MARGINE /*offsetY*/                  ,finestra.w-MARGINE-avanti.Area.w/*offsetX*/,finestra.h,finestra.w,finestra.Renderer),
-           mode2("img/avanti_on.jpg"/*bottone non schiacciato*/,"img/avanti_off.jpg"/*bottone schiacciato*/,titolo.Area.h+finestra.h/MARGINE+avanti.Area.h*2/*offsetY*/   ,finestra.w-MARGINE-avanti.Area.w/*offsetX*/,finestra.h,finestra.w,finestra.Renderer),
-           close_("img/close.png","img/close.png",0,0,finestra.h,finestra.w,finestra.Renderer),
-           stop("img/avanti_on.jpg"/*bottone non schiacciato*/,"img/avanti_on.jpg"/*bottone schiacciato*/,0,0,finestra.h,finestra.w,finestra.Renderer),
-           video_b("img/avanti_on.jpg","img/avanti_on.jpg",0,0,finestra.h,finestra.w,finestra.Renderer),
-           indietro_v("img/avanti_on.jpg","img/avanti_on.jpg",0,0,finestra.h,finestra.w,finestra.Renderer);
+    Button avanti("img/avanti_on.jpg"/*bottone non schiacciato*/,"img/avanti_off.jpg"/*bottone schiacciato*/,"img/avanti_passive.jpg"/*bottone disattivato*/,titolo.Area.h+finestra.h/MARGINE /*offsetY*/                 ,MARGINE/*offsetX*/                         ,finestra.h,finestra.w,finestra.Renderer),
+           indietro("img/avanti_on.jpg"/*bottone non schiacciato*/,"img/avanti_off.jpg"/*bottone schiacciato*/,"img/avanti_passive.jpg"/*bottone disattivato*/,titolo.Area.h+finestra.h/MARGINE+avanti.Area.h*2/*offsetY*/,MARGINE/*offsetX*/                         ,finestra.h,finestra.w,finestra.Renderer),
+           mode1("img/avanti_on.jpg"/*bottone non schiacciato*/,"img/avanti_off.jpg"/*bottone schiacciato*/,"img/avanti_passive.jpg"/*bottone disattivato*/,titolo.Area.h+finestra.h/MARGINE /*offsetY*/                  ,finestra.w-MARGINE-avanti.Area.w/*offsetX*/,finestra.h,finestra.w,finestra.Renderer),
+           mode2("img/avanti_on.jpg"/*bottone non schiacciato*/,"img/avanti_off.jpg"/*bottone schiacciato*/,"img/avanti_passive.jpg"/*bottone disattivato*/,titolo.Area.h+finestra.h/MARGINE+avanti.Area.h*2/*offsetY*/   ,finestra.w-MARGINE-avanti.Area.w/*offsetX*/,finestra.h,finestra.w,finestra.Renderer),
+           close("img/close.png","img/close.png","img/close.png",0,0,finestra.h,finestra.w,finestra.Renderer),
+           close_("img/close.png","img/close.png","img/close.png",0,0,finestra.h,finestra.w,finestra.Renderer),
+           stop("img/avanti_on.jpg"/*bottone non schiacciato*/,"img/avanti_on.jpg"/*bottone schiacciato*/,"img/avanti_passive.jpg"/*bottone disattivato*/,0,0,finestra.h,finestra.w,finestra.Renderer),
+           video_b("img/avanti_on.jpg","img/avanti_on.jpg","img/avanti_passive.jpg",0,0,finestra.h,finestra.w,finestra.Renderer),
+           indietro_v("img/avanti_on.jpg","img/avanti_on.jpg","img/avanti_passive.jpg",0,0,finestra.h,finestra.w,finestra.Renderer);
     //variabili per la gestione dei nomi sulle giostre
     std::string giostre_s[3],leggi;
     //apre il file con il nome delle giostre
@@ -690,15 +704,6 @@ int main() {
                         //controllo se è stato schiacciato uno dei 4 pulsanti
                         if(mode2.Click(tocco,mode1.stato,mode1.stato,mode2.stato)||mode1.Click(tocco,mode2.stato,mode1.stato,mode2.stato)){
                             invia=true;
-                        }
-                        //calcolo se un pulsante deve essere attivo o meno
-                        avanti.attivo=indietro.stato;
-                        indietro.attivo=avanti.stato;
-                        mode1.attivo=mode2.stato;
-                        mode2.attivo=mode1.stato;
-                        //se è stato premuto uno dei 2 pulsanti imposta in automatico la velocità più lenta
-                        if((!avanti.stato||!indietro.stato)&&mode2.stato){
-                            mode1.stato=false;
                         }
                     //invia i dati al ESP32
                     if(inviato){
