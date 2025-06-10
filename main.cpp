@@ -125,8 +125,6 @@ struct Button
     //destructor del bottone
     ~Button(){
         memset(&Area,0,sizeof(Area));
-        SDL_DestroyRenderer(Renderer);
-        Renderer=nullptr;
         SDL_DestroyTexture(ON);
         ON=nullptr;
         SDL_DestroyTexture(OFF);
@@ -232,8 +230,6 @@ struct RideButton
         Scritta_t=nullptr;
         SDL_DestroyTexture(Sfondo_t);
         Sfondo_t=nullptr;
-        SDL_DestroyRenderer(Renderer);
-        Renderer=nullptr;
     }
     //funzione per renderizzare il testo
     void Render(){
@@ -345,9 +341,9 @@ void Connesione(SocketType &s,const char* ip,SDL_Event &event,Windows &finestra)
             if(iResult==-1){
                 std::cout<<"connection failed with error "<<WSAGetLastError()<<"\n";
                 #ifdef _WIN32
-                closesocket(s);
+                    closesocket(s);
                 #else
-                close(s);
+                    close(s);
                 #endif
                 s=INVALID_SOCKET;
                 continue;
@@ -362,6 +358,7 @@ void Connesione(SocketType &s,const char* ip,SDL_Event &event,Windows &finestra)
         //libera la memoria che tiene salvato il risultato della ricerca
         freeaddrinfo(result);
     }while(s==INVALID_SOCKET);
+    scritta.~Text();
 }
 int main() {
     int iResult=0;
@@ -419,6 +416,8 @@ int main() {
     for(uint8_t i=0;std::getline(file,leggi);++i){
         giostre_s[i]=leggi;
     }
+    //libera la memoria perchè non useremo più la classe file
+    file.close();
     //definizione dei vari bottoni con i nomi delle giostre
     RideButton Giostra1(giostre_s[0].c_str(),"img/sfondo_pulsante_giostra1.jpg",finestra.w,finestra.h,finestra.Renderer,1,MARGINE,1),
                Giostra2(giostre_s[1].c_str(),"img/sfondo_pulsante_giostra1.jpg",finestra.w,finestra.h,finestra.Renderer,1,Giostra1.Area_sfondo.h+Giostra1.Area_sfondo.y,1),
@@ -452,14 +451,6 @@ int main() {
     bool quit=false,NewPage=true;
     //variabli per prendere traccia degli eventi che accandono mentre la finestra è aperta
     SDL_Event event;
-    //lettura del file ip.txt in cui è scritto l'ip dell'ESP32
-    file.open("file_modificabili/ip.txt");
-    //var in cui sarà salvato l'ip
-    std::string ip;
-    //legge la prima riga del file
-    std::getline(file,ip);
-    //libera la memoria perchè non useremo più la classe file
-    file.close();
     //creo il socket per poter fare la comunicazione con l'ESP32
     SocketType s = INVALID_SOCKET;
    //creazione del buffer che conterà i dati da mandare
