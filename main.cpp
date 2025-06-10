@@ -1,9 +1,21 @@
-#define WIN32_LEARN_AND_MEAN
 #define SDL_MAIN_HANDLED
-//librerie Windows per la comunicazione
-#include <winsock2.h>
-#include <windows.h>
-#include <ws2tcpip.h>
+#ifdef _WIN32
+    //librerie Windows per la comunicazione
+    #define WIN32_LEARN_AND_MEAN
+    #include <winsock2.h>
+    #include <windows.h>
+    #include <ws2tcpip.h>
+    typedef SOCKET SocketType;
+#else
+    #include <sys/socket.h>
+    #include <netinet/in.h>
+    #include <arpa/inet.h>
+    #include <unistd.h>
+    #include <netdb.h>
+    typedef int SocketType;
+    #define INVALID_SOCKET -1
+#endif
+
 //librerie SDL
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
@@ -27,6 +39,7 @@
 
 //macro per la connesione di rete
 #define PORT "27016"
+#define IP "192.168.4.1"
 
 //sistema per verificare le variabili
 template <typename var>
@@ -75,9 +88,8 @@ struct Windows
 struct Button
 {
     SDL_Rect Area{0,0,0,0};
-    SDL_Renderer *Sfondo{nullptr};
-    SDL_Texture *ON{nullptr},*OFF{nullptr},*passivo{nullptr};
     SDL_Renderer *Renderer=nullptr;
+    SDL_Texture *ON{nullptr},*OFF{nullptr},*passivo{nullptr};
     bool stato=true,attivo=true;
     
     //costructor del bottone
@@ -134,7 +146,7 @@ struct Button
         }
     }
     //controllo se è stato cliccato 
-    bool Click(SDL_Point tocco,bool &alterego,bool &mode1,bool &mode2){
+    bool Click(SDL_Point tocco,bool &alterego,bool &mode1,bool &mode2,bool &stop){
         if(attivo){
             //se il click era nell'area del pulsante e il pulsante opposto non è stato schiacciato il pulsante fa vedere la texture rossa
             if(tocco.x>Area.x&&tocco.x<Area.x+Area.w&&tocco.y>Area.y&&tocco.y<Area.y+Area.h){
@@ -144,7 +156,8 @@ struct Button
                 }
                 if(!alterego){
                     alterego=true;
-                }            
+                    stop=true;
+                }
                 return true;
             }
         }
@@ -293,16 +306,22 @@ struct  Text
     }
 };
 //funzione per collegarsi al server
-void Connesione(SOCKET &s,const char* ip){
+void Connesione(SocketType &s,const char* ip,SDL_Event &event,Windows &finestra){
     if(s!=INVALID_SOCKET){
-        closesocket(s);
+        #ifdef _WIN32
+            closesocket(s);
+        #else
+            close(s);
+        #endif
         s=INVALID_SOCKET;
     }
+    Text scritta("Connesione in corso . . .",finestra.w,finestra.h,finestra.Renderer,2);
+    scritta.Area.y=(finestra.h-scritta.Area.h)/2;
     //variabile che conserverà il risultato dei vari protocolli
     int iResult=0;
     //variabili che conserveranno il tipo di protocollo di rete e le informazioni del server
     struct addrinfo *result=nullptr,*ptr=nullptr,hints;
-    ZeroMemory(&hints,sizeof(hints));
+    memset(&hints,0,sizeof(hints));
     //impostiamo che vogliamo fare una connesione TCP
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
@@ -310,7 +329,7 @@ void Connesione(SOCKET &s,const char* ip){
     //continua a cercare di collegarsi al server fi quando non trova una connesione
     do{
         //prende le informazioni dell server e le salva in hints e result
-        iResult=getaddrinfo(ip,PORT,&hints,&result);
+        iResult=getaddrinfo(IP,PORT,&hints,&result);
         if(iResult!=0){
             std::cout<<"getaddrinfo failed "<<WSAGetLastError()<<"\n";
         }
@@ -323,12 +342,21 @@ void Connesione(SOCKET &s,const char* ip){
             }
             //prova ad utilizzare la connesione trovata prima per connetersi al server
             iResult=connect(s,ptr->ai_addr,(int)ptr->ai_addrlen);
-            if(iResult==SOCKET_ERROR){
+            if(iResult==-1){
                 std::cout<<"connection failed with error "<<WSAGetLastError()<<"\n";
+                #ifdef _WIN32
                 closesocket(s);
+                #else
+                close(s);
+                #endif
                 s=INVALID_SOCKET;
                 continue;
             }
+            SDL_RenderClear(finestra.Renderer);
+            SDL_RenderCopy(finestra.Renderer,finestra.Texture,nullptr,nullptr);
+            scritta.Render();
+            SDL_RenderPresent(finestra.Renderer);
+            SDL_Delay(16);
             break;
         }
         //libera la memoria che tiene salvato il risultato della ricerca
@@ -336,12 +364,15 @@ void Connesione(SOCKET &s,const char* ip){
     }while(s==INVALID_SOCKET);
 }
 int main() {
-    //inizializza winsock2
-    WSADATA wsaData;
-    int iResult=WSAStartup(MAKEWORD(2,2),&wsaData);
-    if(iResult!=0){
-        std::cout<<"Impossibile inizializzare WSA\t"<<iResult<<"\n\n";
-    }
+    int iResult=0;
+    #ifdef _WIN32
+        //inizializza winsock2
+        WSADATA wsaData;
+        iResult=WSAStartup(MAKEWORD(2,2),&wsaData);
+        if(iResult!=0){
+            std::cout<<"Impossibile inizializzare WSA\t"<<iResult<<"\n\n";
+        }
+    #endif
     //inizializzazione di SDL 
     if(SDL_Init(SDL_INIT_VIDEO)<0){
         std::cerr<<"impossibile inizializzare SDL2";
@@ -376,7 +407,6 @@ int main() {
            indietro("img/avanti_on.jpg"/*bottone non schiacciato*/,"img/avanti_off.jpg"/*bottone schiacciato*/,"img/avanti_passive.jpg"/*bottone disattivato*/,titolo.Area.h+finestra.h/MARGINE+avanti.Area.h*2/*offsetY*/,MARGINE/*offsetX*/                         ,finestra.h,finestra.w,finestra.Renderer),
            mode1("img/avanti_on.jpg"/*bottone non schiacciato*/,"img/avanti_off.jpg"/*bottone schiacciato*/,"img/avanti_passive.jpg"/*bottone disattivato*/,titolo.Area.h+finestra.h/MARGINE /*offsetY*/                  ,finestra.w-MARGINE-avanti.Area.w/*offsetX*/,finestra.h,finestra.w,finestra.Renderer),
            mode2("img/avanti_on.jpg"/*bottone non schiacciato*/,"img/avanti_off.jpg"/*bottone schiacciato*/,"img/avanti_passive.jpg"/*bottone disattivato*/,titolo.Area.h+finestra.h/MARGINE+avanti.Area.h*2/*offsetY*/   ,finestra.w-MARGINE-avanti.Area.w/*offsetX*/,finestra.h,finestra.w,finestra.Renderer),
-           close("img/close.png","img/close.png","img/close.png",0,0,finestra.h,finestra.w,finestra.Renderer),
            close_("img/close.png","img/close.png","img/close.png",0,0,finestra.h,finestra.w,finestra.Renderer),
            stop("img/avanti_on.jpg"/*bottone non schiacciato*/,"img/avanti_on.jpg"/*bottone schiacciato*/,"img/avanti_passive.jpg"/*bottone disattivato*/,0,0,finestra.h,finestra.w,finestra.Renderer),
            video_b("img/avanti_on.jpg","img/avanti_on.jpg","img/avanti_passive.jpg",0,0,finestra.h,finestra.w,finestra.Renderer),
@@ -431,11 +461,7 @@ int main() {
     //libera la memoria perchè non useremo più la classe file
     file.close();
     //creo il socket per poter fare la comunicazione con l'ESP32
-    SOCKET s = INVALID_SOCKET;
-    //thread che gestirà la connesione con il server in modo che non fermi il corretto funzionamento della finestra
-    std::thread connesione(Connesione,std::ref(s),"192.168.4.1");
-    //avvia il thread in parallelo
-    connesione.join();
+    SocketType s = INVALID_SOCKET;
    //creazione del buffer che conterà i dati da mandare
    int size=6;
    unsigned char buffer[size];
@@ -460,6 +486,7 @@ int main() {
         ClientState.Area.x=finestra.w-ClientState.Area.w-MARGINE;
         ClientState.Area.y=finestra.h-ClientState.Area.h-MARGINE;
         inviato=false;
+        Connesione(s,IP,event,finestra);
     }
     else{
        ClientState.UpdateText("Stato motore: Connesso",finestra.w,finestra.h);
@@ -538,7 +565,7 @@ int main() {
                         ClientState.UpdateText("Stato motore: Sconnesso",finestra.w,finestra.h);
                         ClientState.Area.x=finestra.w-ClientState.Area.w-MARGINE;
                         ClientState.Area.y=finestra.h-ClientState.Area.h-MARGINE;
-                        
+                        Connesione(s,IP,event,finestra);                        
                         inviato=false;
                     }
                     else{
@@ -661,7 +688,8 @@ int main() {
                                ClientState.UpdateText("Stato motore: Sconnesso",finestra.w,finestra.h);
                                 ClientState.Area.x=finestra.w-ClientState.Area.w-MARGINE;
                                 ClientState.Area.y=finestra.h-ClientState.Area.h-MARGINE;
-                               inviato=false;
+                                Connesione(s,IP,event,finestra);
+                                inviato=false;
                                 
                             }
                             else{
@@ -695,18 +723,44 @@ int main() {
                             video_b.attivo=true;
                         }
                         //controllo se è stato schiacciato uno dei 4 pulsanti
-                        if(avanti.Click(tocco,indietro.stato,mode1.stato,mode2.stato)||indietro.Click(tocco,avanti.stato,mode1.stato,mode2.stato)){
+                        if(avanti.Click(tocco,indietro.stato,mode1.stato,mode2.stato,allarme)||indietro.Click(tocco,avanti.stato,mode1.stato,mode2.stato,allarme)){
                             //controllo se è stato schiacciato solo 1 dei 2 pulsanti reciproci se si allora invia i dati
                             if((!avanti.stato&&indietro.stato||!indietro.stato&&avanti.stato)&&(mode1.stato&&!mode2.stato||mode2.stato&&!mode1.stato)){
                                 invia=true;
                             }
                         }
                         //controllo se è stato schiacciato uno dei 4 pulsanti
-                        if(mode2.Click(tocco,mode1.stato,mode1.stato,mode2.stato)||mode1.Click(tocco,mode2.stato,mode1.stato,mode2.stato)){
+                        if(mode2.Click(tocco,mode1.stato,mode1.stato,mode2.stato,allarme)||mode1.Click(tocco,mode2.stato,mode1.stato,mode2.stato,allarme)){
                             invia=true;
+                            allarme=false;
                         }
                     //invia i dati al ESP32
                     if(inviato){
+                        if(allarme){
+                            buffer[0]=false;
+                            buffer[1]=false;
+                            buffer[2]=false;
+                            buffer[3]=false;
+                            buffer[5]=allarme;
+                            buffer[6]='\0';
+                            iResult=send(s,(const char *)buffer,size,0);
+                            //sistema per il controllo con la connesione al server
+                            if(iResult==-1){
+                                std::cerr<<"impossibile mandare il messaggio\n";
+                                ClientState.UpdateText("Stato motore: Sconnesso",finestra.w,finestra.h);
+                                ClientState.Area.x=finestra.w-ClientState.Area.w-MARGINE;
+                                ClientState.Area.y=finestra.h-ClientState.Area.h-MARGINE;
+                                Connesione(s,IP,event,finestra);
+                                inviato=false;
+                            }
+                            else{
+                                ClientState.UpdateText("Stato motore: Connesso",finestra.w,finestra.h);
+                                ClientState.Area.x=finestra.w-ClientState.Area.w-MARGINE;
+                                ClientState.Area.y=finestra.h-ClientState.Area.h-MARGINE;
+                                inviato=true;
+                            }
+                            allarme=false;
+                        }
                         //calcola il valore delle variabili che verranno inviate
                         BuffAvv=!avanti.stato;
                         BuffIndi=!indietro.stato;
@@ -731,7 +785,7 @@ int main() {
                             ClientState.UpdateText("Stato motore: Sconnesso",finestra.w,finestra.h);
                             ClientState.Area.x=finestra.w-ClientState.Area.w-MARGINE;
                             ClientState.Area.y=finestra.h-ClientState.Area.h-MARGINE;
-                            
+                            Connesione(s,IP,event,finestra);
                             inviato=false;
                         }
                         else{
@@ -887,7 +941,12 @@ int main() {
     V_Giostra3.release();
     SDL_DestroyTexture(texture_video);
     texture_video=nullptr;
+    #ifdef _WIN32
     closesocket(s);
+    WSACleanup();
+    #else
+    close(s);
+    #endif
     //deinizializza le robe di SDL
     IMG_Quit();
     TTF_Quit();
